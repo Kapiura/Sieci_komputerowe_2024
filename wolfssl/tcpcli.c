@@ -18,82 +18,75 @@
 WOLFSSL_CTX *ctx;
 WOLFSSL *ssl;
 
-WOLFSSL_CTX *ctx;
-WOLFSSL *ssl;
-int sock;
-int addr_length;
-
 int main(int argc, char *argv[])
 {
     // zmienne gniazdka oraz dlugosci adresu
+    int sock;
+    int addr_length;
     // pobieranie adresu oraz portu z linii komend
     if (argc < 3)
     {
         printf("Usage: <address> <port>\n");
         exit(1);
     }
-    // pobranie adresu oraz portu z linii komend - parametry przy uruchamianiu programu
-    if (argc < 3)
-    {
-        fprintf(stderr, "Usage: %s <address> <port>\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
 
     // ustawienie portu
     int portno = atoi(argv[2]);
 
-    // inicjalizacja struktury, uzywanej do przechowywania adresu IP oraz numeru portu
-    // z ktorym chcemy nawiazac polaczenie
+    // inicjalizacja struktury serwera => uzywana do przychowywania adresu IP oraz numeru portu z ktorymi chcemy
+    // nawiazac polaczenie
     struct sockaddr_in serwer;
     bzero((char *)&serwer, sizeof(serwer));
     serwer.sin_family = AF_INET;
     serwer.sin_port = htons(portno);
 
-    // uzyskanie informacji na temat adresu IP serwera
-    // za pomoca funkcji
+    // uzyskanie informacji na temat adresu IP serwera z ktorym chcemy sie polaczyc za pomoca nazwy
     struct hostent *host;
+    // nazwa serwera jako argument z linii komend
     char dnsbuffer[255];
     strncpy(dnsbuffer, argv[1], sizeof(dnsbuffer) - 1);
     host = gethostbyname(dnsbuffer);
-    // sprawdzanie hosta czy taki sobie isntieje uwu
-    // oraz wyprintowanie adresu ip
-    // kopoiowanie adresu ip zwroconego czyli tego wyswieltonego
+    // sprawdzenie czy host istnieje
+    // jesli tak wyswietlamy jego adres IP
+    // kopiowanie zwrocenego adresu IP
     if (host != NULL)
     {
-        printf("\nIP address of %s is: ", host->h_name);
+        printf("Ip adress of %s : ", host->h_name);
         printf("%s\n\n", inet_ntoa(*(struct in_addr *)host->h_addr));
         memcpy(&serwer.sin_addr, host->h_addr, host->h_length);
     }
+    // jesli nie ma takiego
     else
     {
         perror("gethostbyname() ERROR");
-        exit(-16);
-    }
-
-    // otwieranie gniazda
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0)
-    {
-        perror("socket() ERROR");
         exit(2);
     }
 
-    // oplaczenie gniazda z serwerem
-    if (connect(sock, (struct sockaddr *)&serwer, sizeof(serwer)) < 0)
+    // otwierane socketu
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (!sock)
     {
-        perror("connect() ERROR");
+        printf("socket() error\n");
         exit(3);
     }
 
-    // inicjacja wolfa
+    // polaczenie gniazda z serwerem
+    int con = connect(sock, (struct sockaddr *)&serwer, sizeof(serwer));
+    if (!con)
+    {
+        printf("connect() error\n");
+        exit(4);
+    }
+
+    // init wolfa
     wolfSSL_Init();
 
-    // Tworzenie polaczenia ssl dla klienta
+    // tworzenie polaczenia ssl dla klienta
     ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
     if (ctx == NULL)
     {
-        fprintf(stderr, "Error creating WOLFSSL_CTX\n");
-        exit(EXIT_FAILURE);
+        printf("error during creating wolfssl_ctx\n");
+        exit(5);
     }
 
     // ustawienie metody weryfikacji certyfikatow
@@ -103,41 +96,40 @@ int main(int argc, char *argv[])
     ssl = wolfSSL_new(ctx);
     if (ssl == NULL)
     {
-        fprintf(stderr, "Error creating SSL structure\n");
-        exit(EXIT_FAILURE);
+        printf("error during creating ssl structure\n");
+        exit(6);
     }
 
     // ustawienie deskryptora pliku dla ssl
     wolfSSL_set_fd(ssl, sock);
 
-    // polaczaenie ssl
+    // polaczaenie ssl klienta z serwerem
     if (wolfSSL_connect(ssl) != WOLFSSL_SUCCESS)
     {
-        fprintf(stderr, "SSL connect error\n");
-        exit(EXIT_FAILURE);
+        printf("ssl connect error\n");
+        exit(7);
     }
 
+    // tworzenie requesta HTTP 1.1 w podany sposob na stronie
     char httpreq[] = "HEAD /index.html HTTP/1.1\r\nHost: google.com\r\nUser-Agent: Mozilla/5.0 (X11; "
                      "Ubuntu;)\r\nAccept-Language: en-US\r\nAccept-Encoding: gzip\r\n\r\n";
 
     // wysylanie zapytania do serwera http
-    if (wolfSSL_write(ssl, httpreq, sizeof(httpreq) - 1) < 0)
+    int httpWolfReq = wolfSSL_write(ssl, httpreq, sizeof(httpreq) - 1);
+    if (httpWolfReq)
     {
-        perror("wolfSSL_write() ERROR");
-        exit(EXIT_FAILURE);
+        printf("wolfSSL_write() error\n");
+        exit(8);
     }
 
-    // czekanie 5 sekund
-    sleep(5);
-
-    // tablica do przechopwywania danych
-    char wwwbuffer[4096];
+    // tablica do przechopwywania danych przeslanych przez serwer
+    char buffer[4096];
     // liczba odczytanych bajtow
-    int ret = wolfSSL_read(ssl, wwwbuffer, sizeof(wwwbuffer) - 1);
+    int ret = wolfSSL_read(ssl, buffer, sizeof(buffer) - 1);
     if (ret > 0)
     {
-        wwwbuffer[ret] = '\0';
-        printf("%s\n", wwwbuffer);
+        buffer[ret] = '\0';
+        printf("%s\n", buffer);
     }
 
     // zamkykanie polaczania ssl

@@ -20,6 +20,6 @@
  */
 
 #ifndef NO_FILESYSTEM
-    #define CERT_PREFIX "/home/kapiura/Downloads/wolfssl-5.7.0/"
-    #define CERT_WRITE_TEMP_DIR "/home/kapiura/Downloads/wolfssl-5.7.0/"
+    #define CERT_PREFIX "/home/kapiura/dev/sieci/wolfssl/"
+    #define CERT_WRITE_TEMP_DIR "/home/kapiura/dev/sieci/wolfssl/"
 #endif /* NO_FILESYSTEM */

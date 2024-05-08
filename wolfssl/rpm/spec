@@ -37,7 +37,7 @@ you will need to install %{name}-devel.
 %setup -q
 
 %build
-%configure  '--enable-dtls' '--enable-psk' '--enable-sni' '--enable-tls13'
+%configure 
 %{__make} %{?_smp_mflags}
 if [ "no" = "yes" ]
 then

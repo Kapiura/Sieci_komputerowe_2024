@@ -30,9 +30,6 @@ extern "C" {
 #undef  WOLFSSL_X86_64_BUILD
 #define WOLFSSL_X86_64_BUILD
 
-#undef  WOLFSSL_DTLS
-#define WOLFSSL_DTLS
-
 #undef  ERROR_QUEUE_PER_THREAD
 #define ERROR_QUEUE_PER_THREAD
 
@@ -140,6 +137,9 @@ extern "C" {
 
 #undef  HAVE_ENCRYPT_THEN_MAC
 #define HAVE_ENCRYPT_THEN_MAC
+
+#undef  NO_PSK
+#define NO_PSK
 
 #undef  NO_MD4
 #define NO_MD4

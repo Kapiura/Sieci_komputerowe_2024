@@ -78,8 +78,8 @@ examples/echoclient/echoclient.o: examples/echoclient/echoclient.c \
  /usr/include/asm-generic/sockios.h \
  /usr/include/bits/types/struct_osockaddr.h /usr/include/arpa/inet.h \
  /usr/include/netinet/in.h /usr/include/bits/in.h /usr/include/sys/uio.h \
- /usr/include/bits/uio_lim.h wolfssl/error-ssl.h wolfssl/test.h \
- /usr/include/assert.h wolfssl/wolfcrypt/mem_track.h \
+ /usr/include/bits/uio_lim.h wolfssl/test.h /usr/include/assert.h \
+ wolfssl/error-ssl.h wolfssl/wolfcrypt/mem_track.h \
  wolfssl/wolfcrypt/asn.h wolfssl/wolfcrypt/wolfmath.h \
  wolfssl/wolfcrypt/sp_int.h \
  /usr/lib/gcc/x86_64-redhat-linux/13/include/limits.h \
@@ -266,9 +266,9 @@ wolfssl/wolfio.h:
 /usr/include/bits/in.h:
 /usr/include/sys/uio.h:
 /usr/include/bits/uio_lim.h:
-wolfssl/error-ssl.h:
 wolfssl/test.h:
 /usr/include/assert.h:
+wolfssl/error-ssl.h:
 wolfssl/wolfcrypt/mem_track.h:
 wolfssl/wolfcrypt/asn.h:
 wolfssl/wolfcrypt/wolfmath.h:

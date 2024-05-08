@@ -1,15 +1,15 @@
-examples/client/tests_unit_test-client.o: examples/client/client.c \
- /usr/include/stdc-predef.h .build_params config.h wolfssl/options.h \
- wolfssl/wolfcrypt/settings.h wolfssl/wolfcrypt/visibility.h \
- wolfssl/ssl.h wolfssl/version.h wolfssl/wolfcrypt/asn_public.h \
- wolfssl/wolfcrypt/types.h wolfssl/wolfcrypt/wc_port.h \
- /usr/include/pthread.h /usr/include/features.h \
- /usr/include/features-time64.h /usr/include/bits/wordsize.h \
- /usr/include/bits/timesize.h /usr/include/sys/cdefs.h \
- /usr/include/bits/long-double.h /usr/include/gnu/stubs.h \
- /usr/include/gnu/stubs-64.h /usr/include/sched.h \
- /usr/include/bits/types.h /usr/include/bits/typesizes.h \
- /usr/include/bits/time64.h \
+examples/client/tests_unit_test-client.o: \
+ examples/client/client.c /usr/include/stdc-predef.h .build_params \
+ config.h wolfssl/options.h wolfssl/wolfcrypt/settings.h \
+ wolfssl/wolfcrypt/visibility.h wolfssl/ssl.h wolfssl/version.h \
+ wolfssl/wolfcrypt/asn_public.h wolfssl/wolfcrypt/types.h \
+ wolfssl/wolfcrypt/wc_port.h /usr/include/pthread.h \
+ /usr/include/features.h /usr/include/features-time64.h \
+ /usr/include/bits/wordsize.h /usr/include/bits/timesize.h \
+ /usr/include/sys/cdefs.h /usr/include/bits/long-double.h \
+ /usr/include/gnu/stubs.h /usr/include/gnu/stubs-64.h \
+ /usr/include/sched.h /usr/include/bits/types.h \
+ /usr/include/bits/typesizes.h /usr/include/bits/time64.h \
  /usr/lib/gcc/x86_64-redhat-linux/13/include/stddef.h \
  /usr/include/bits/types/time_t.h \
  /usr/include/bits/types/struct_timespec.h /usr/include/bits/endian.h \
