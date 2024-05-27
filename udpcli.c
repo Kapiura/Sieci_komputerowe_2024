@@ -1,59 +1,113 @@
-
-
 #include <arpa/inet.h>
+#include <errno.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#define SERWER_PORT 2137
-#define SERWER_IP "156.17.148.219"
+#define BUFFER_SIZE 200
 
-int main()
+int main(int argc, char *argv[])
 {
-    // W strukturze server_addr bÄ™dzie adres serwera UDP
-    struct sockaddr_in serwer_addr = {.sin_family = AF_INET, .sin_port = htons(SERWER_PORT)};
-    if (inet_pton(AF_INET, SERWER_IP, &serwer_addr.sin_addr) <= 0)
+    if (argc != 3)
     {
-        printf("inet_pton() ERROR\n");
-        exit(101); // exit - 101 to kod bÅ‚edu
+        fprintf(stderr, "Usage: %s <Ip addr> <port>\n", argv[0]);
+        exit(EXIT_FAILURE);
     }
 
-    int sd = socket(AF_INET, SOCK_DGRAM, 0);
+    int portno;
+    struct sockaddr_in server_addr;
+    char *ip_addr = argv[1];
 
-    // char buffer[4096] = "Welcome udp server ;33";
-    char buffer[8000] = "Welcome udp server ";
+    portno = atoi(argv[2]);
+    bzero((char *)&server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(portno);
 
-    printf("Message for server: %s \n", buffer);
-
-    socklen_t len = sizeof(serwer_addr);
-
-    if (sendto(sd, buffer, strlen(buffer), 0, (struct sockaddr *)&serwer_addr, len) < 0)
+    if (inet_pton(AF_INET, ip_addr, &server_addr.sin_addr) <= 0)
     {
-        printf("sendto() ERROR\n");
-        exit(103);
+        perror("inet_pton() ERROR");
+        exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in from = {};
-    memset(buffer, 0, sizeof(buffer));
-
-    int received = recvfrom(sd, buffer, 7000, 0, (struct sockaddr *)&from, &len);
-    if (received < 0)
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0)
     {
-        printf("recvfrom() ERROR\n");
-        exit(104);
+        perror("socket() ERROR");
+        exit(EXIT_FAILURE);
     }
 
-    /****************************************************************
-    **   prosze wypisac:
-    **
-    **    - dÅ‚ugoÅ›Ä‡ otrzymanych danych
-    **    - adres  nadawcy jako string np inet_ntoa(from.sin_addr)
-    **    - zawartosc pakietu odebranego jako string
-    ****************************************************************/
-    printf("Dlugosc otrzymanych danych:\t%d\n", (int)sizeof(buffer));
-    printf("Adres nadawcy:\t%s\n", inet_ntoa(from.sin_addr));
-    printf("Zawartość pakietu odebranego jako string:\t%s\n", buffer);
+    if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+    {
+        perror("Connect() error\n");
+        exit(EXIT_FAILURE);
+    }
 
-    shutdown(sd, SHUT_RDWR);
+    printf("Connected to server. Enter message to send (or 'exit' to quit): \n");
+
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds); // stdin do zbiotu odczytu
+    FD_SET(sock, &readfds);         // sock do zbioru do odczytu
+
+    while (1)
+    {
+        fflush(stdout);
+
+        int max_fd = (sock > STDIN_FILENO) ? sock : STDIN_FILENO;
+        int activity = select(max_fd + 1, &readfds, NULL, NULL, NULL);
+        if (activity < 0)
+        {
+            perror("select() error");
+            exit(EXIT_FAILURE);
+        }
+
+        if (FD_ISSET(STDIN_FILENO, &readfds))
+        {
+            char input_buffer[BUFFER_SIZE];
+            fgets(input_buffer, BUFFER_SIZE, stdin);
+
+            if (strncmp(input_buffer, "exit", 4) == 0)
+            {
+                printf("Exiting...\n");
+                break;
+            }
+
+            if (send(sock, input_buffer, strlen(input_buffer), 0) < 0)
+            {
+                perror("send() error");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (FD_ISSET(sock, &readfds))
+        {
+            char buffer[BUFFER_SIZE];
+            ssize_t n = recv(sock, buffer, sizeof(buffer), 0);
+            if (n < 0)
+            {
+                perror("recv() error");
+                exit(EXIT_FAILURE);
+            }
+            else if (n == 0)
+            {
+                printf("Server closed the connection.\n");
+                break;
+            }
+            else
+            {
+                printf("\nReceived message from server: %.*s\n\n", (int)n, buffer);
+            }
+        }
+
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        FD_SET(sock, &readfds);
+    }
+
+    close(sock);
+    return 0;
 }
