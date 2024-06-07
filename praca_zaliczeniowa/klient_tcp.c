@@ -1,133 +1,135 @@
 #include <arpa/inet.h> // inet_addr()
+#include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h> // bzero()
+#include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h> // read(), write(), close()
 
-/*
- * struct sockaddr_in
- * {
- * short sin_family;            jest to rodzina adresów IP my zawsze podajemy AF_INET dla IPv4
- * unsigned short sin_port;     port w reprezentacji sieciowej
- * struct in_addr sin_addr;     adres IP w formie liczby
- * char sin_zero[8];            cos co nie ma aktualnie znaczenia
- * };
- */
+#define BUFFER_SIZE 1000
+
+uint32_t histogram[16];
+
+void clear_histogram()
+{
+    bzero(histogram, sizeof(histogram));
+}
+
+char *sendPackage(char *nameBuff, char command)
+{
+    static char result[BUFFER_SIZE];
+    // memset(result, '0', BUFFER_SIZE); // Initialize the buffer with null characters
+    //
+    size_t nameLen = strlen(nameBuff);
+    result[0] = '@';
+    if (nameLen < 8)
+    {
+        char paddedName[9] = {0};
+        strncpy(paddedName, nameBuff, nameLen);
+        memset(paddedName + nameLen, '_', 8 - nameLen);
+        strncpy(&result[1], paddedName, 8);
+    }
+    else
+    {
+        strncpy(&result[1], nameBuff, 8);
+    }
+    result[9] = '0'; // Ensure the '0' remains at index 9
+    result[10] = '!';
+    result[11] = command;
+    result[12] = ':';
+
+    // Handle any specific commands if necessary
+    switch (command)
+    {
+    case 'N':
+        result[13] = '0'; // Ending character
+        result[14] = '#'; // Ending character
+        // Command-specific handling can be added here
+        break;
+    default:
+        // Default handling for unknown commands
+        break;
+    }
+
+    return result;
+}
+
+// Error checking function
+int check(int exp, const char *mess)
+{
+    if (exp < 0)
+    {
+        perror(mess);
+        exit(1);
+    }
+    return exp;
+}
 
 int main(int argc, char *argv[])
 {
-    // pobranie parametru z linii komend
+
+    // Validate command-line arguments
     if (argc != 4)
     {
-        printf("Usage: <name> <server address> <port numer>");
+        printf("Usage: %s <name> <server address> <port number>\n", argv[0]);
         exit(1);
     }
 
-    // numer portu
+    char *clientName = argv[1];
     int port = atoi(argv[3]);
-    // dane serwera z ktorym pragniemy sie polaczyc
-    struct sockaddr_in serverAddr;
-    // adres ip serwera
     char *ip_addr = argv[2];
-    // Stworzenie struktury serwera
-    serverAddr.sin_family = AF_INET;
 
+    printf("Connecting to %s on port %d\n", ip_addr, port);
+
+    // Create the server address structure
+    struct sockaddr_in serverAddr;
     bzero((char *)&serverAddr, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
-    serverAddr.sin_addr.s_addr = inet_addr(ip_addr);
 
-    // Tworzenie gniazda TCP
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0)
+    // Convert IP address to binary form
+    check(inet_pton(AF_INET, ip_addr, &serverAddr.sin_addr), "inet_pton error");
+
+    // Create the TCP socket
+    int sock = check(socket(AF_INET, SOCK_STREAM, 0), "socket() error");
+
+    // Connect to the server
+    check(connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)), "connect() error");
+
+    printf("Connected to server.\n");
+
+    // Send a predefined message to the server without user interaction
+    char *input_buff = sendPackage(clientName, 'N');
+    int snd = send(sock, input_buff, strlen(input_buff), 0);
+    check(snd, "send() error");
+
+    printf("Message sent: %s\n", input_buff);
+
+    // Read the response from the server
+    char output_buff[BUFFER_SIZE];
+    ssize_t rc = recv(sock, output_buff, sizeof(output_buff), 0);
+    if (rc < 0)
     {
-        perror("socket() error\n");
-        exit(3);
+        perror("recv() error");
+        exit(1);
+    }
+    else if (rc == 0)
+    {
+        printf("Server closed connection :c\n");
+    }
+    else
+    {
+        printf("Received message from server:\n %.*s\n", (int)rc, output_buff);
     }
 
-    // tworzenie polaczenia klienta z serwerem za pomoca connect
-    // polaczenie sokcetu - connect
-    int conn = connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-    if (conn < 0)
-    {
-        printf("connect() ERROR");
-        exit(4);
-    }
-
-    // nazawa klienta podana w wierszu polecen
-    char namebuffer[100];
-    strcpy(namebuffer, argv[1]);
-
-    // komunikacja z serwerem
-    char buffor[128];
-    int n;
-
-    while (1)
-    {
-        bzero(buffor, sizeof(buffor));
-
-        printf("Type mess for server:\n");
-        n = 0;
-
-        while ((buffor[n++] = getchar()) != '\n')
-            ;
-        write(sock, buffor, sizeof(buffor));
-
-        bzero(buffor, sizeof(buffor));
-
-        read(sock, buffor, sizeof(buffor));
-
-        printf("Mess from server:\n");
-        printf("%s\n", buffor);
-
-        if ((strcmp(buffor, "q")) == 0)
-        {
-            printf("Bye!");
-            break;
-        }
-    }
-
-    // zamkniecie gniazda
+    // Close the socket
     close(sock);
+    printf("Connection closed bye!\n");
     return 0;
 }
-
-/*
- * KLIENT TCP
- * ODBIERA DANE OD SERWERA
- * WYKONUJE OBLICZENIA
- * WYSYLA WYNIKI DO SERWERA
- *
- * KLIENT URUCHAMIANY Z PARAMETRAMI
- * <nazwa> <adres serwera> <nr portu>
- *
- * ZA POMOCA SKYRPTU W DOCELOWYM TESCIE
- * URUCHAMIAMY DO 10 KLIENTOW
- *
- * KLIENT LACZY SIE Z SERWEREM ZA POMOCA
- * ADRESU I PORTU
- *
- * COMMAND
- *
- * PO POLACZENIU KLIENT WYSYLA DO SERWERA
- * PAKIET A1 Z NAZWA PODANA JAKO PARAMETR
- * I KOMENDA N => PROSBA O NOWE DANE
- *
- * KLIENT PO DOSTANIU KOMENDY P OTWIERA POLACZENIE DATA
- * NA WSKAZANY NUMER PORITU I POBIERA DANE
- * WYKONUJE OBLICZENIA
- * ODSYLA WYIKI W PAKIECIE A2 Z KOMENDA R
- * JESLI WYSTAPI BLAD, KLIENT WYSYLA DO SERWERA PAKIET A3
- *
- * Z KOMENDA E
- *
- * PO OTRZYMANIU KOMENDY X KONCZY PRACE KLIENT
- *
- * KLIENT PO OTRZYMANIU D KONCZY POALCZAENIE COMMAND I ROZOPOCZYNA PRACE OD NOWA
- *
- * NA EKRANIE MUSZA SIE POJAWIC INFORMACJE O STANIE POLACZNEIA I WYNIKACH DANYCH
- */
