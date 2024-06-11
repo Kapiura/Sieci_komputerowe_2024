@@ -13,54 +13,16 @@
 #include <unistd.h> // read(), write(), close()
 
 #define BUFFER_SIZE 1000
+#define MAX_DATA 10000
 
-uint32_t histogram[16];
-
-void clear_histogram()
+// Definicja struktury do przechowywania komendy i numeru portu
+typedef struct
 {
-    bzero(histogram, sizeof(histogram));
-}
+    char port[4];
+    char r;
+} commandR;
 
-char *sendPackage(char *nameBuff, char command)
-{
-    static char result[BUFFER_SIZE];
-    // memset(result, '0', BUFFER_SIZE); // Initialize the buffer with null characters
-    //
-    size_t nameLen = strlen(nameBuff);
-    result[0] = '@';
-    if (nameLen < 8)
-    {
-        char paddedName[9] = {0};
-        strncpy(paddedName, nameBuff, nameLen);
-        memset(paddedName + nameLen, '_', 8 - nameLen);
-        strncpy(&result[1], paddedName, 8);
-    }
-    else
-    {
-        strncpy(&result[1], nameBuff, 8);
-    }
-    result[9] = '0'; // Ensure the '0' remains at index 9
-    result[10] = '!';
-    result[11] = command;
-    result[12] = ':';
-
-    // Handle any specific commands if necessary
-    switch (command)
-    {
-    case 'N':
-        result[13] = '0'; // Ending character
-        result[14] = '#'; // Ending character
-        // Command-specific handling can be added here
-        break;
-    default:
-        // Default handling for unknown commands
-        break;
-    }
-
-    return result;
-}
-
-// Error checking function
+// Funkcja sprawdzająca błędy i wypisująca komunikat, jeśli wystąpił błąd
 int check(int exp, const char *mess)
 {
     if (exp < 0)
@@ -71,65 +33,232 @@ int check(int exp, const char *mess)
     return exp;
 }
 
+// Tablica do przechowywania histogramu bitów
+uint32_t histogram[16];
+
+// Funkcja czyszcząca histogram
+void clear_histogram()
+{
+    bzero(histogram, sizeof(histogram));
+}
+
+// Funkcja tworząca pakiet do wysłania
+int sendPackage(char *package, char *nameBuff, char command, uint32_t *bitCounter)
+{
+    size_t nameLen = strlen(nameBuff);
+    package[0] = '@';
+
+    // Dodawanie nazwy klienta do pakietu, wypełnianie brakujących miejsc znakami '_'
+    if (nameLen < 8)
+    {
+        char paddedName[9] = {0};
+        strncpy(paddedName, nameBuff, nameLen);
+        memset(paddedName + nameLen, '_', 8 - nameLen);
+        strncpy(&package[1], paddedName, 8);
+    }
+    else
+    {
+        strncpy(&package[1], nameBuff, 8);
+    }
+
+    // Dodawanie stałych wartości do pakietu
+    package[9] = '0'; // Zapewnienie, że '0' jest na indeksie 9
+    package[10] = '!';
+    package[11] = command;
+    package[12] = ':';
+    package[999] = '#';
+
+    // Obsługa specyficznych komend
+    switch (command)
+    {
+    case 'R':
+        for (int i = 0; i < 16; i++)
+        {
+            package[i + 13] = bitCounter[i];
+        }
+        break;
+
+    case 'P':
+    case 'D':
+    case 'X':
+        break;
+
+    default:
+        break;
+    }
+
+    return 0;
+}
+
+// Funkcja zwracająca bit z określonej pozycji
+int getBit(int position, int number)
+{
+    return (number >> position) & 1;
+}
+
+// Funkcja przetwarzająca komendę 'P'
+void commandP(char *package, commandR *r)
+{
+    for (int i = 12; package[i] != '#'; i++)
+    {
+        r->port[i - 12] = package[i];
+    }
+    r->r = package[10];
+}
+
+// Funkcja przetwarzająca dane przychodzące od serwera i aktualizująca licznik bitów
+void connP(char *buffer, uint32_t *bit_count)
+{
+    uint32_t number = *((uint32_t *)&buffer[0]);
+    printf("%d\n", number);
+    for (int i = 15; i >= 0; i--)
+    {
+        bit_count[i] += getBit(i, number) == 1 ? 1 : 0;
+        printf("%d", getBit(i, number));
+    }
+    printf("\nend\n");
+}
+
+// Funkcja obsługująca połączenie z serwerem i odbierająca dane
+void handle(int sk, uint32_t *bitCounter)
+{
+    int bytes_read = 1;
+    int cumulative_read = 0;
+    int counter = 0;
+    char read_buffer[4];
+
+    while (bytes_read > 0)
+    {
+        // Odbieranie danych z gniazda
+        bytes_read = recv(sk, read_buffer, 4, 0);
+        if (bytes_read < 0)
+        {
+            perror("recv() error");
+            exit(EXIT_FAILURE);
+        }
+
+        cumulative_read += bytes_read;
+        counter++;
+
+        printf("Liczba bajtów odczytanych w tej chwili: %d\n", bytes_read);
+        printf("i: %d\n", counter);
+
+        // Przerwanie, jeśli odczytano wystarczającą ilość danych
+        if (cumulative_read >= MAX_DATA * 4)
+        {
+            break;
+        }
+
+        // Przetwarzanie odebranych danych
+        connP(read_buffer, bitCounter);
+    }
+
+    printf("\n\n");
+    for (int i = 0; i < 16; i++)
+    {
+        printf("Licznik: %d\n Liczba: %d\n", i, bitCounter[i]);
+    }
+
+    printf("\nDane z serwera: ");
+}
+
+// Funkcja main - punkt wejścia programu
 int main(int argc, char *argv[])
 {
-
-    // Validate command-line arguments
+    // Sprawdzanie poprawności argumentów wywołania
     if (argc != 4)
     {
         printf("Usage: %s <name> <server address> <port number>\n", argv[0]);
         exit(1);
     }
 
+    // Inicjalizacja zmiennych
     char *clientName = argv[1];
     int port = atoi(argv[3]);
     char *ip_addr = argv[2];
 
-    printf("Connecting to %s on port %d\n", ip_addr, port);
+    // Tworzenie gniazda
+    int sock = check(socket(AF_INET, SOCK_STREAM, 0), "socket() error");
 
-    // Create the server address structure
+    printf("Łączenie się z %s na porcie %d\n", ip_addr, port);
+
+    // Tworzenie struktury adresu serwera
     struct sockaddr_in serverAddr;
     bzero((char *)&serverAddr, sizeof(serverAddr));
+    serverAddr.sin_addr.s_addr = inet_addr(ip_addr);
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
 
-    // Convert IP address to binary form
-    check(inet_pton(AF_INET, ip_addr, &serverAddr.sin_addr), "inet_pton error");
-
-    // Create the TCP socket
-    int sock = check(socket(AF_INET, SOCK_STREAM, 0), "socket() error");
-
-    // Connect to the server
+    // Łączenie się z serwerem
     check(connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)), "connect() error");
 
-    printf("Connected to server.\n");
+    printf("Połączono z serwerem.\n");
 
-    // Send a predefined message to the server without user interaction
-    char *input_buff = sendPackage(clientName, 'N');
-    int snd = send(sock, input_buff, strlen(input_buff), 0);
-    check(snd, "send() error");
+    // Wysyłanie predefiniowanej wiadomości do serwera bez interakcji z użytkownikiem
+    int conn;
+    char serverBuff[BUFFER_SIZE];
+    commandR cr;
 
-    printf("Message sent: %s\n", input_buff);
+    char package[BUFFER_SIZE];
+    memset(package, '0', sizeof(package));
 
-    // Read the response from the server
-    char output_buff[BUFFER_SIZE];
-    ssize_t rc = recv(sock, output_buff, sizeof(output_buff), 0);
-    if (rc < 0)
+    // Wysyłanie pakietu 'N' (nowe dane) do serwera
+    check(sendPackage(package, clientName, 'N', NULL), "sendPackage() error");
+    printf("Pakiet: %s\n", package);
+    check(write(sock, package, BUFFER_SIZE), "write() error");
+    read(sock, serverBuff, BUFFER_SIZE);
+
+    // Przetwarzanie odpowiedzi serwera
+    commandP(serverBuff, &cr);
+    printf("Numer portu od serwera: %s\nKomenda od serwera: %c\n", cr.port, cr.r);
+
+    while (1)
     {
-        perror("recv() error");
-        exit(1);
-    }
-    else if (rc == 0)
-    {
-        printf("Server closed connection :c\n");
-    }
-    else
-    {
-        printf("Received message from server:\n %.*s\n", (int)rc, output_buff);
+        for (;;)
+        {
+            switch (cr.r)
+            {
+            case 'P':
+                check(sock = socket(AF_INET, SOCK_STREAM, 0), "socket() error");
+
+                struct sockaddr_in serverAddr;
+                bzero((char *)&serverAddr, sizeof(serverAddr));
+                serverAddr.sin_addr.s_addr = inet_addr(ip_addr);
+                serverAddr.sin_family = AF_INET;
+                serverAddr.sin_port = htons(atoi(cr.port));
+
+                uint32_t bitCounter[16];
+                for (int i = 0; i < 16; i++)
+                {
+                    bitCounter[i] = 0;
+                }
+
+                // Obsługa połączenia z serwerem i odbieranie danych
+                handle(sock, bitCounter);
+                close(sock);
+                printf("Pomyślnie odebrano dane z serwera\n");
+
+                // Wysyłanie wyników obliczeń do serwera
+                sendPackage(package, clientName, 'R', bitCounter);
+                check(write(sock, package, BUFFER_SIZE), "write() error");
+
+                read(sock, serverBuff, BUFFER_SIZE);
+                commandP(serverBuff, &cr);
+                break;
+
+            case 'X':
+                close(sock);
+                exit(EXIT_SUCCESS);
+
+            case 'D':
+                goto ex;
+
+            default:
+                break;
+            }
+        }
+    ex:;
     }
 
-    // Close the socket
-    close(sock);
-    printf("Connection closed bye!\n");
     return 0;
 }
